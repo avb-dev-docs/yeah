@@ -1,0 +1,94 @@
+---
+title: Standalone sign-in
+description: Run without a docs.dev account — GitHub sign-in for your repo's collaborators, or a simple PIN.
+---
+
+Don't want another account? Your site's editor also works fully standalone,
+with two methods you can enable independently. (If you later set up
+[team sign-in](/docs/team), it takes over as the only method.)
+
+## GitHub sign-in
+
+Editors sign in with GitHub; authorization is **push access to your docs
+repo** — if someone can push, they can edit, and their publishes are
+committed *as them* in git history.
+
+Set it up once:
+
+1. Create a **GitHub App** (Settings → Developer settings → GitHub Apps) with
+   the callback URL:
+
+   ```
+   https://<your-site>/api/auth/github/callback
+   ```
+
+2. Enable **"Request user authorization (OAuth) during installation"** and
+   install the app on your docs repo.
+3. Set two secrets on your Worker:
+
+   ```bash
+   wrangler secret put GITHUB_APP_CLIENT_ID
+   wrangler secret put GITHUB_APP_CLIENT_SECRET
+   ```
+
+That's it — `/admin` now shows **Sign in with GitHub**.
+
+## PIN sign-in
+
+The lightweight option for solo sites and local development: one shared PIN.
+
+### Set the PIN
+
+Set two secrets on your Worker — you'll be prompted for each value:
+
+```bash
+wrangler secret put ADMIN_PIN       # the PIN editors type at /admin
+wrangler secret put ADMIN_SECRET    # long random string that seals session cookies
+```
+
+Pick any PIN you like; for the sealing key, generate something strong:
+
+```bash
+openssl rand -base64 32
+```
+
+Both are required — there is **no default PIN**. This template is public
+code, so a baked-in fallback would be a published constant, not a secret; an
+unconfigured deployment simply has editing disabled until you set these.
+
+Once set, visit `/admin` (or the **Edit page** button on any page after
+signing in) and enter the PIN. Sessions last 8 hours.
+
+### Local development
+
+Secrets aren't available to `pnpm dev`, so put them in a `.dev.vars` file at
+the repo root (it's gitignored — never commit it):
+
+```bash title=".dev.vars"
+ADMIN_PIN=1234
+ADMIN_SECRET=any-long-random-string-for-local-work
+```
+
+### Rotating
+
+- **Change the PIN:** run `wrangler secret put ADMIN_PIN` again. Existing
+  sessions stay valid until they expire (8 hours); only new sign-ins need
+  the new PIN.
+- **Sign everyone out now:** rotate `ADMIN_SECRET`. Session cookies are
+  sealed with it, so changing it invalidates every session immediately.
+
+<Callout title="Which should I use?">
+  GitHub sign-in for anything with more than one editor — real identity, per
+  person revocation, commit attribution. PIN for a personal site or a quick
+  demo. Both at once is fine: the sign-in screen offers whatever is
+  configured.
+</Callout>
+
+## Publishing credential
+
+Publishes from GitHub-signed-in editors use their own token. PIN sessions
+(and the shared-drafts store) need a server credential:
+
+```bash
+wrangler secret put GITHUB_PAT      # fine-grained token, contents: read/write on the docs repo
+```
